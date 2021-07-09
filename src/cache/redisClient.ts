@@ -2,8 +2,9 @@ import redis from "redis";
 
 const portRedis = process.env.REDIS_URL || "6379";
 console.log("portRedis: ", portRedis);
+const redisOptions = {};
 
-export const redisClient = redis.createClient(portRedis);
+export const redisClient = redis.createClient(portRedis, redisOptions);
 redisClient.on("error", function (error) {
   console.error(error);
 });
