@@ -2,13 +2,8 @@ import express from "express";
 import cors from "cors";
 import { leaguepedia } from "./leaguepedia";
 import { IAPIQuery, ITournamentsQuery } from "./leaguepedia/constants";
-import redis from "redis";
 import { isCached } from "./cache";
-
-const redisClient = redis.createClient();
-redisClient.on("error", function (error) {
-  console.error(error);
-});
+import { redisClient } from "./cache/redisClient";
 
 const app = express();
 const port = process.env.PORT || 3001;
