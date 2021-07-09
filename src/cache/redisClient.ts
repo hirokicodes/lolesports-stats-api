@@ -1,10 +1,14 @@
 import redis from "redis";
 
-const portRedis = process.env.REDIS_URL || "6379";
-console.log("portRedis: ", portRedis);
-const redisOptions = {};
+export const redisClient =
+  process.env.NODE_ENV === "production"
+    ? redis.createClient({
+        host: process.env.REDIS_URL!,
+        port: parseInt(process.env.REDIS_PORT!),
+        password: process.env.REDIS_PASSWORD!,
+      })
+    : redis.createClient();
 
-export const redisClient = redis.createClient(portRedis, redisOptions);
 redisClient.on("error", function (error) {
   console.error(error);
 });
