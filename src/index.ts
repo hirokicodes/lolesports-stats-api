@@ -59,7 +59,7 @@ function generateRegionsQuery(regions: string[]) {
 app.get(
   "/api/tournaments",
   async (req: express.Request<{}, {}, {}, ITournamentsQuery>, res) => {
-    console.log("HERE IS API ROUTE");
+    console.log("API TOURNAMENTS: ", req.query);
     const q = req.query;
 
     const tournamentsData = await leaguepedia.fetchData({
@@ -74,7 +74,7 @@ app.get(
         .slice(0, 19)
         .replace(/-/g, "/")
         .replace("T", " ")}"
-      ${q.regions ? generateRegionsQuery(JSON.parse(q.regions)) : ""}`,
+      ${q.regions ? generateRegionsQuery(q.regions) : ""}`,
       limit: 500,
       joinOn: "",
       orderBy: `T.DateStart DESC`,

@@ -85,6 +85,6 @@ enum TournamentLevel {
 
 export interface ITournamentsQuery {
   year?: number;
-  regions?: string;
+  regions?: string[];
   tournamentLevel?: TournamentLevel;
 }
