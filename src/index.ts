@@ -4,6 +4,7 @@ import { leaguepedia } from "./leaguepedia";
 import { IAPIQuery, ITournamentsQuery } from "./leaguepedia/constants";
 import { isCached } from "./cache";
 import { redisClient } from "./cache/redisClient";
+import { roundToTwo } from "./util/roundToTwo";
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -139,7 +140,7 @@ app.get(
 
     const gamesData = await leaguepedia.fetchData({
       tables: `MatchSchedule=MS, MatchScheduleGame=MSG, PicksAndBansS7=PAB, ScoreboardGames=SG`,
-      fields: `MS.DateTime_UTC, SG._pageName=SGPage, PAB._pageName=PBPage, MS.Team1=MatchTeam1, MS.Team2=MatchTeam2, MS.Tab, MSG.GameId,
+      fields: `MS.MatchId, MS.DateTime_UTC, SG._pageName=SGPage, PAB._pageName=PBPage, MS.Team1=MatchTeam1, MS.Team2=MatchTeam2, MS.Tab, MSG.GameId,
       SG.Team1, SG.Team2, SG.Team1Picks, SG.Team2Picks, SG.Team1Bans, SG.Team2Bans, SG.Team1Players, SG.Team2Players, SG.Team1Dragons, SG.Team2Dragons,
       SG.Team1Barons, SG.Team2Barons, SG.Team1Towers, SG.Team2Towers, SG.Team1Gold, SG.Team2Gold, SG.Team1Kills, SG.Team2Kills,
       SG.Team1RiftHeralds, SG.Team2RiftHeralds, SG.Team1Inhibitors, SG.Team2Inhibitors, SG.Patch, SG.MatchHistory, SG.Winner, SG.Gamelength`,
@@ -196,6 +197,155 @@ app.get(
 );
 
 app.get(
+  "/api/tournaments/:name/champions",
+  async (req: express.Request<{ name: string }, {}, {}, IAPIQuery>, res) => {
+    const q: any = req.query;
+    const name = req.params.name;
+    // Pick rate, win rate, wins, losses table data
+
+    // const gamesData = await leaguepedia.fetchData({
+    //   tables: `MatchSchedule=MS, MatchScheduleGame=MSG, PicksAndBansS7=PAB, ScoreboardGames=SG`,
+    //   fields: `MS.MatchId, MS.DateTime_UTC, SG._pageName=SGPage, PAB._pageName=PBPage, MS.Team1=MatchTeam1, MS.Team2=MatchTeam2, MS.Tab, MSG.GameId,
+    //   SG.Team1, SG.Team2, SG.Team1Picks, SG.Team2Picks, SG.Team1Bans, SG.Team2Bans, SG.Team1Players, SG.Team2Players, SG.Team1Dragons, SG.Team2Dragons,
+    //   SG.Team1Barons, SG.Team2Barons, SG.Team1Towers, SG.Team2Towers, SG.Team1Gold, SG.Team2Gold, SG.Team1Kills, SG.Team2Kills,
+    //   SG.Team1RiftHeralds, SG.Team2RiftHeralds, SG.Team1Inhibitors, SG.Team2Inhibitors, SG.Patch, SG.MatchHistory, SG.Winner, SG.Gamelength`,
+    //   where: `MS.OverviewPage="${decodeURIComponent(name)}"`,
+    //   joinOn: `MS.UniqueMatch=MSG.UniqueMatch,MSG.GameId=PAB.GameId,MSG.GameId=SG.GameId`,
+    //   orderBy: `MS.DateTime_UTC,MSG.N_GameInMatch ASC`,
+    //   limit: q.limit,
+    //   offset: q.offset,
+    //   format: "json",
+    // });
+    const gamesData = await leaguepedia.fetchData({
+      tables: `PicksAndBansS7=PAB, ScoreboardGames=SG`,
+      fields: `SG.Winner, SG.Team1Picks, SG.Team2Picks, SG.Team1Bans, SG.Team2Bans, 
+      PAB.Team1Ban1, PAB.Team1Ban2, PAB.Team1Ban3, PAB.Team1Ban4, PAB.Team1Ban5, 
+      PAB.Team1Pick1, PAB.Team1Pick2, PAB.Team1Pick3, PAB.Team1Pick4, 
+      PAB.Team1Pick5, PAB.Team2Ban1, PAB.Team2Ban2, PAB.Team2Ban3, 
+      PAB.Team2Ban4, PAB.Team2Ban5, PAB.Team2Pick1, PAB.Team2Pick2, PAB.Team2Pick3, 
+      PAB.Team2Pick4, PAB.Team2Pick5, PAB.Team1PicksByRoleOrder, PAB.Team2PicksByRoleOrder, 
+      PAB.Phase`,
+      where: `SG.OverviewPage="${decodeURIComponent(name)}"`,
+      joinOn: `SG.GameId=PAB.GameId`,
+      orderBy: ``,
+      limit: q.limit,
+      offset: q.offset,
+      format: "json",
+    });
+
+    console.log(gamesData);
+
+    const resData = [];
+
+    const championsDictionary: { [key: string]: { [key: string]: number } } =
+      {};
+    let gamesPlayed = 0;
+    gamesData.forEach((gameData: any) => {
+      // If game data has picks, in other words the game has already been played
+      if (gameData.Team1Picks.length === 5) {
+        gamesPlayed += 1;
+
+        gameData.Team1Picks.forEach((champion: string) => {
+          if (champion in championsDictionary) {
+            championsDictionary[champion].Picks += 1;
+            championsDictionary[champion].BlueSidePicks += 1;
+            championsDictionary[champion].Wins += gameData.Winner === 1 ? 1 : 0;
+          } else {
+            championsDictionary[champion] = {
+              Picks: 1,
+              Bans: 0,
+              Wins: gameData.Winner === 1 ? 1 : 0,
+              BlueSidePicks: 1,
+              BlueSideBans: 0,
+              RedSidePicks: 0,
+              RedSideBans: 0,
+            };
+          }
+        });
+
+        gameData.Team2Picks.forEach((champion: string) => {
+          if (champion in championsDictionary) {
+            championsDictionary[champion].Picks += 1;
+            championsDictionary[champion].RedSidePicks += 1;
+            championsDictionary[champion].Wins += gameData.Winner === 2 ? 1 : 0;
+          } else {
+            championsDictionary[champion] = {
+              Picks: 1,
+              Bans: 0,
+              Wins: gameData.Winner === 2 ? 1 : 0,
+              BlueSidePicks: 0,
+              BlueSideBans: 0,
+              RedSidePicks: 1,
+              RedSideBans: 0,
+            };
+          }
+        });
+
+        gameData.Team1Bans.forEach((champion: string) => {
+          if (champion in championsDictionary) {
+            championsDictionary[champion].Bans += 1;
+            championsDictionary[champion].BlueSideBans += 1;
+          } else {
+            championsDictionary[champion] = {
+              Picks: 0,
+              Bans: 1,
+              Wins: 0,
+              BlueSidePicks: 0,
+              BlueSideBans: 1,
+              RedSidePicks: 0,
+              RedSideBans: 0,
+            };
+          }
+        });
+
+        gameData.Team2Bans.forEach((champion: string) => {
+          if (champion in championsDictionary) {
+            championsDictionary[champion].Bans += 1;
+            championsDictionary[champion].RedSideBans += 1;
+          } else {
+            championsDictionary[champion] = {
+              Picks: 0,
+              Bans: 1,
+              Wins: 0,
+              BlueSidePicks: 0,
+              BlueSideBans: 0,
+              RedSidePicks: 0,
+              RedSideBans: 1,
+            };
+          }
+        });
+      }
+    });
+
+    for (let [key, value] of Object.entries(championsDictionary)) {
+      resData.push({
+        Champion: key,
+        Picks: value.Picks,
+        Bans: value.Bans,
+        Wins: value.Wins,
+        Losses: value.Picks - value.Wins,
+        WinRate: value.Picks ? roundToTwo((value.Wins / value.Picks) * 100) : 0,
+        BlueSidePicks: value.BlueSidePicks,
+        BlueSideBans: value.BlueSideBans,
+        RedSidePicks: value.RedSidePicks,
+        RedSideBans: value.RedSideBans,
+        Presence: roundToTwo(((value.Picks + value.Bans) / gamesPlayed) * 100),
+      });
+    }
+    resData.sort((a, b) => {
+      return b.Presence - a.Presence;
+    });
+    console.log(resData);
+
+    // If the search is not cached, save it in redis
+    // key = stringified q
+    // data = stringified data
+    redisSetex(req.originalUrl, JSON.stringify(q), JSON.stringify(resData));
+    res.send(resData);
+  }
+);
+
+app.get(
   "/api/games/:gameId",
   async (req: express.Request<{ gameId: string }, {}, {}, IAPIQuery>, res) => {
     console.log("HERE IS API ROUTE");
@@ -211,7 +361,7 @@ app.get(
       SP.TeamKills, SP.TeamGold, SP.Team, SP.Role`,
       where: `SP.GameId="${decodeURIComponent(gameId)}"`,
       joinOn: ``,
-      orderBy: `SP.DateTime_UTC ASC`,
+      orderBy: `SP.Side, SP.Role_Number ASC`,
       limit: q.limit,
       offset: q.offset,
       format: "json",
